@@ -20,6 +20,7 @@ public:
      * @brief The gameHistoryList struct Struktura obsahujici jednotlivé herní pole
      */
     struct gameHistoryList{
+        int whoMove;
         int Grid[12][12]; //0 prazdna 1 bila 2 cerna
 
     };
