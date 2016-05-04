@@ -233,7 +233,7 @@ void Save(){
              file.close();
          }else{
          clearConsole();
-         cerr<<"Soubor se nepodarilo otevrit.."<<endl;
+         cout<<"Soubor se nepodarilo otevrit.."<<endl;
          QThread::sleep(2);
          Render();
          }

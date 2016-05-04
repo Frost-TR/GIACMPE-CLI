@@ -25,16 +25,22 @@ GameData * GameLogic::Move(GameData *GameDat, int i, int j){
     GameDat->Game.Actual++;
     GameDat->Game.Last=GameDat->Game.Actual;
 
+    int find=0;
+    int end=0;
 
     if(GameDat->Game.ActivePlayer==0){
+        GameDat->Game.History[GameDat->Game.Actual].whoMove=0;
         GameDat->Game.History[GameDat->Game.Actual].Grid[i][j]=1;
+        find=2;
+        end=1;
     }else{
         GameDat->Game.History[GameDat->Game.Actual].Grid[i][j]=2;
+        GameDat->Game.History[GameDat->Game.Actual].whoMove=1;
+        find=1;
+        end=2;
     }
 
     int size=GameDat->Game.GridSize;
-    int find=0;
-    int end=0;
     int tmpi=i;
     int tmpj=j;
     int Grid[12][12];
@@ -44,13 +50,7 @@ GameData * GameLogic::Move(GameData *GameDat, int i, int j){
             Grid[x][y]=GameDat->Game.History[GameDat->Game.Actual].Grid[x][y];
         }
     }
-    if(GameDat->Game.ActivePlayer==0){
-      find=2;
-      end=1;
-    }else{
-      find=1;
-      end=2;
-    }
+
   //prepis vlevo
     if(i>1){
         if(Grid[i-1][j]==find){
