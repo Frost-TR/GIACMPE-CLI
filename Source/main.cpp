@@ -8,12 +8,20 @@
 #include <iostream>
 #include <unistd.h>
 #include "./Headers/gamedata.h"
+#include "./Headers/gamelogic.h"
+#include "./Headers/gameinteligence.h"
 
 
 
 using namespace std;
 
+
+void SwitchActivePlayer();
+void DissableButtonGrid();
 void Render();
+void Undo();
+void Redo();
+void Save();
 
 GameData *GameDat= new GameData();
 bool DisableGrid[12][12];
@@ -21,11 +29,17 @@ bool error;
 QChar GridRe[100][100];
 int size;
 
+
+/**
+ * @brief clearConsole Funkce cistici konzoly
+ */
 void clearConsole(){
     system("cls||clear");
 }
 
-
+/**
+ * @brief printHelp Funkce tisknouci napovedu
+ */
 void printHelp(){
     clearConsole();
     cout<<"Help:"<<endl;
@@ -34,16 +48,17 @@ void printHelp(){
     cout<<"     Priklad spusteni: hra2016-cli -h => vytiskne tuto napovedu"<<endl;
 }
 
+/**
+ * @brief prepareNewGame Funkce pro pripravu nove hry. Pracuje se stdin a stdout
+ */
 void prepareNewGame(){
     clearConsole();
     QTextStream s(stdin);
     QString *Qline = new QString();
-    std::string line;
 
     cout<<"Nova Hra :"<<endl;
     cout<<"Zadejte velikost hraciho pole (6 pro 6x6,8 pro 8x8, 10 pro 10x10, 12 pro 12x12, defaultni hodnota je 8): ";
-    std::getline(std::cin, line);
-    *Qline=QString::fromStdString(line);
+    *Qline=s.readLine();
     int tmpnumber = Qline->toInt();
     switch(tmpnumber){
     case 6:
@@ -64,26 +79,26 @@ void prepareNewGame(){
     }
 
     cout<<"Zadejte jmeno prvniho hrace : ";
-    std::getline(std::cin, line);
     Qline->clear();
-    *Qline=QString::fromStdString(line);
+    *Qline=s.readLine();
+    if(Qline->isEmpty()){
+    GameDat->Game.Player1Name = new QString("Hrac 1");
+    }else{
     GameDat->Game.Player1Name = new QString(*Qline);
+    }
+
 
     cout<<"Prejete si hrat proti Umele inteligenci? A/N (defaultni hodnota je N) : ";
-    std::getline(std::cin, line);
     Qline->clear();
+    *Qline=s.readLine();
 
-    *Qline=QString::fromStdString(line);
-
-    if(QString::compare(*Qline,"A")==0){
+    if(QString::compare(*Qline,"A",Qt::CaseInsensitive)==0){
         GameDat->Game.OpponentIsHuman=false;
-        line.clear();
         cout<<"Vybrali jste si pocitac jako protivnika..." << endl;
         cout<<"Zadejte jeho uroven (0 pro tezkou, 1 pro stredni, 2 pro lehkou, defaultni hornota je 1): ";
-        std::getline(std::cin, line);
-        QString Qline2;
-        Qline2.append(QString::fromStdString(line));
-        tmpnumber = Qline2.toInt();
+        Qline->clear();
+        *Qline=s.readLine();
+        tmpnumber = Qline->toInt();
         switch(tmpnumber){
         case 0:
             GameDat->Game.AIlevel=0;
@@ -106,10 +121,14 @@ void prepareNewGame(){
         GameDat->Game.OpponentIsHuman=true;
         cout<<"Vybrali jste si lidskeho protivnika..." << endl;
         cout<<"Zadejte jmeno druheho hrace: ";
-        std::getline(std::cin, line);
         Qline->clear();
-        *Qline=QString::fromStdString(line);
+        *Qline=s.readLine();
+        if(Qline->isEmpty()){
+        GameDat->Game.Player2Name= new QString("Hrac 2");
+        }else{
         GameDat->Game.Player2Name= new QString(*Qline);
+        }
+
     }
 
     GameDat->Game.Actual=0;
@@ -135,6 +154,10 @@ void prepareNewGame(){
 
 }
 
+/**
+ * @brief prepareLoadGame Funkce pro nacteni hry ze souboru
+ * @param filename Cesta k souboru
+ */
 void prepareLoadGame(QString *filename){
     error=false;
     QFile file(*filename);
@@ -193,8 +216,11 @@ void prepareLoadGame(QString *filename){
 
 }
 
+/**
+ * @brief Save Funkce ukladajici hru do souboru
+ */
 void Save(){
-    QString Filename;
+    QString Filename="./Hra2016-save.txt";
     QFile file(Filename);
          if (file.open(QIODevice::WriteOnly | QIODevice::Text))
              {
@@ -231,6 +257,10 @@ void Save(){
                 outputGrid->clear();
              }
              file.close();
+             clearConsole();
+             cout<<"Hra byla ulozena do ./Hra2016-save.txt..."<<endl;
+             QThread::sleep(2);
+             Render();
          }else{
          clearConsole();
          cout<<"Soubor se nepodarilo otevrit.."<<endl;
@@ -239,18 +269,105 @@ void Save(){
          }
 }
 
+/**
+ * @brief Redo Funkce provadejici Redo krok vpred
+ */
 void Redo(){
-
+    if(GameDat->Game.OpponentIsHuman){
+    if(GameDat->Game.Actual<GameDat->Game.Last){
+        GameDat->Game.Actual++;
+        SwitchActivePlayer();
+        GameLogic *Logic = new GameLogic();
+        GameDat = Logic->ReCountScore(GameDat);
+        clearConsole();
+        Render();
+        DissableButtonGrid();
+    }else{
+        clearConsole();
+        cout<<"Nelze provedst redo..."<<endl;
+        QThread::sleep(2);
+        Render();
+    }
+    }else{
+        if(GameDat->Game.Actual<GameDat->Game.Last){
+            if(GameDat->Game.History[GameDat->Game.Actual].whoMove==1){
+                while(true){
+                    GameDat->Game.Actual++;
+                    if(GameDat->Game.History[GameDat->Game.Actual].whoMove==0){
+                        GameDat->Game.ActivePlayer=0;
+                        GameDat->Game.Actual++;
+                        break;
+                    }
+                }
+                GameLogic *Logic = new GameLogic();
+                GameDat = Logic->ReCountScore(GameDat);
+                clearConsole();
+                Render();
+                DissableButtonGrid();
+            }
+        }else{
+            clearConsole();
+            cout<<"Nelze provedst redo..."<<endl;
+            QThread::sleep(2);
+            Render();
+        }
+    }
 }
 
+/**
+ * @brief Undo Funkce provadejici undo, krom zpet
+ */
 void Undo(){
+    if(GameDat->Game.OpponentIsHuman){
+
+    if(GameDat->Game.Actual>0){
+        GameDat->Game.Actual--;
+        SwitchActivePlayer();
+        GameLogic *Logic = new GameLogic();
+        GameDat = Logic->ReCountScore(GameDat);
+        clearConsole();
+        Render();
+        DissableButtonGrid();
+    }else{
+        clearConsole();
+        cout<<"Nelze provedst undo..."<<endl;
+        QThread::sleep(2);
+        Render();
+    }
+    }else{
+        if(GameDat->Game.Actual>0){
+            if(GameDat->Game.History[GameDat->Game.Actual].whoMove==1){
+                while(true){
+                    GameDat->Game.Actual--;
+                    if(GameDat->Game.History[GameDat->Game.Actual].whoMove==0){
+                        GameDat->Game.Actual--;
+                        GameDat->Game.ActivePlayer=0;
+                        break;
+                    }
+                }
+                GameLogic *Logic = new GameLogic();
+                GameDat = Logic->ReCountScore(GameDat);
+                clearConsole();
+                Render();
+                DissableButtonGrid();
+            }
+        }else{
+            clearConsole();
+            cout<<"Nelze provedst undo..."<<endl;
+            QThread::sleep(2);
+            Render();
+        }
+    }
 
 }
 
+/**
+ * @brief Render Funkce renderujici herni plochu.
+ */
 void Render(){
     clearConsole();
 
-    cout << "Prikazy: undo (vrati hru o krok zpet), redo (posune hru o krok vpred), quit (ukonci hru), save (ulozi hru), add x y (provede tah na souradnicich x osa x a y na ose y)" <<endl;
+    cout << "Prikazy: undo (vrati hru o krok zpet), redo (posune hru o krok vpred), quit (ukonci hru), save (ulozi hru), add i j (provede tah na souradnicich i osa y a j na ose x)" <<endl;
     cout<<endl;
     cout << "------------------------------------------------------------------------------------------------------------------" << endl;
     int i=2;
@@ -299,19 +416,25 @@ void Render(){
         }
         cout<<endl;
     }
+    std::string name1 = GameDat->Game.Player1Name->toLocal8Bit().constData();
+    std::string name2 = GameDat->Game.Player2Name->toLocal8Bit().constData();
+
+
+
+
     if(GameDat->Game.ActivePlayer==0){
-        cout<< "     oooooooooooooooo - " << *GameDat->Game.Player1Name->toLatin1();
-        cout << "Score: " << std::to_string(GameDat->Game.Player1Score);
+        cout<< "     oooooooooooooooo - " << name1;
+        cout << "  Score: " << std::to_string(GameDat->Game.Player1Score);
         cout << " (Na tahu) "<< endl;
         cout<<endl;
-        cout<< "     xxxxxxxxxxxxxxxx - " << *GameDat->Game.Player2Name->toLatin1();
-        cout << "Score: " << std::to_string(GameDat->Game.Player2Score);
+        cout<< "     xxxxxxxxxxxxxxxx - " << name2;
+        cout << "  Score: " << std::to_string(GameDat->Game.Player2Score);
     }else{
-        cout<< "     oooooooooooooooo - " << *GameDat->Game.Player1Name->toLatin1();
-        cout << "Score: " << std::to_string(GameDat->Game.Player1Score);
+        cout<< "     oooooooooooooooo - " << name1;
+        cout << "  Score: " << std::to_string(GameDat->Game.Player1Score);
         cout<<endl;
-        cout<< "     xxxxxxxxxxxxxxxx - " << *GameDat->Game.Player2Name->toLatin1();
-        cout << "Score: " << std::to_string(GameDat->Game.Player2Score);
+        cout<< "     xxxxxxxxxxxxxxxx - " << name2;
+        cout << "  Score: " << std::to_string(GameDat->Game.Player2Score);
         cout << " (Na tahu) "<< endl;
     }
     cout << endl;
@@ -379,6 +502,9 @@ void Init(){
     }
 }
 
+/**
+ * @brief DissableButtonGrid Funkce pro zaznamenavajici jiz polozene kameny, aby nebylo mozne na danou pozici polozit dalsi.
+ */
 void DissableButtonGrid(){
     for(int i=0;i<GameDat->Game.GridSize;i++){
         for(int j=0;j<GameDat->Game.GridSize;j++){
@@ -391,6 +517,9 @@ void DissableButtonGrid(){
     }
 }
 
+/**
+ * @brief SwitchActivePlayer Funkce prepinajici aktivniho hrace.
+ */
 void SwitchActivePlayer(){
     if(GameDat->Game.ActivePlayer==0){
         GameDat->Game.ActivePlayer=1;
@@ -399,13 +528,266 @@ void SwitchActivePlayer(){
     }
 }
 
+/**
+ * @brief WinMessage Funkce tisknouci viteznou zpravu.
+ */
+void WinMessage(){
+    QString *message= new QString("");
+    message->resize(2000);
+    message->clear();
+    message->append("Player ");
+    if(GameDat->Game.Player1Score>GameDat->Game.Player2Score){
+        message->append(*GameDat->Game.Player1Name);
+        message->append(" Win.\n");
+        message->append("Score : ");
+        message->append(*GameDat->Game.Player1Name);
+        message->append(" - ");
+        message->append(QString::number(GameDat->Game.Player1Score));
+        message->append(" : ");
+        message->append(QString::number(GameDat->Game.Player2Score));
+        message->append(" - ");
+        message->append(*GameDat->Game.Player2Name);
+    }else{
+        message->append(*GameDat->Game.Player2Name);
+        message->append(" Win.\n");
+        message->append("Score : ");
+        message->append(*GameDat->Game.Player1Name);
+        message->append(" - ");
+        message->append(QString::number(GameDat->Game.Player1Score));
+        message->append(" : ");
+        message->append(QString::number(GameDat->Game.Player2Score));
+        message->append(" - ");
+        message->append(*GameDat->Game.Player2Name);
+    }
+    clearConsole();
+    cout<<message->toStdString()<<endl;
+    QThread::sleep(2);
+    Render();
+}
+
+/**
+ * @brief Play Funkce obsluhujici logiku hru.
+ * @param i Souradnice tahu na ose y
+ * @param j Souradnice tahu na ose x
+ * @return
+ */
+int Play(int i, int j){
+
+    if(!DisableGrid[i][j]){
+     GameLogic *Logic = new GameLogic();
+
+     if(GameDat->Game.OpponentIsHuman){
+         if(Logic->SolveMove(GameDat->Game.History[GameDat->Game.Actual].Grid,i,j,GameDat->Game.GridSize,GameDat->Game.ActivePlayer)){
+             GameDat = Logic->Move(GameDat,i,j);
+             SwitchActivePlayer();
+             if(Logic->CanMove(GameDat)){
+                 GameDat = Logic->ReCountScore(GameDat);
+                 clearConsole();
+                 Render();
+                 DissableButtonGrid();
+             }else{
+                 clearConsole();
+                 cout<<"Nemuzes hrat. Protihrac je na tahu..."<<endl;
+                 QThread::sleep(2);
+                 Render();
+                SwitchActivePlayer();
+                if(Logic->CanMove(GameDat)){
+                    GameDat = Logic->ReCountScore(GameDat);
+                    clearConsole();
+                    Render();
+                    DissableButtonGrid();
+                }else{
+                    WinMessage();
+                    return 1;
+                }
+             }
+             if(GameDat->Game.RemainingStones==0){
+                WinMessage();
+                return 1;
+             }
+         }else{
+             clearConsole();
+             cout<<"Tento tah nelze provedst..."<<endl;
+             QThread::sleep(2);
+             Render();
+         }
+     }else{
+         if(Logic->SolveMove(GameDat->Game.History[GameDat->Game.Actual].Grid,i,j,GameDat->Game.GridSize,GameDat->Game.ActivePlayer)){
+             GameDat = Logic->Move(GameDat,i,j);
+             SwitchActivePlayer();
+             if(Logic->CanMove(GameDat)){
+                 GameDat = Logic->ReCountScore(GameDat);
+                 clearConsole();
+                 Render();
+                 DissableButtonGrid();
+                 QThread::msleep(300);
+                 GameInteligence *AI = new GameInteligence();
+                 GameDat = AI->SwitchInteligence(GameDat);
+                 QThread::msleep(300);
+                 SwitchActivePlayer();
+                 GameDat = Logic->ReCountScore(GameDat);
+                 clearConsole();
+                 Render();
+                 DissableButtonGrid();
+                 while(true){
+                    if(Logic->CanMove(GameDat)){
+                        break;
+                    }else{
+                        clearConsole();
+                        cout<<"Nemuzes hrat. Protihrac je na tahu..."<<endl;
+                        QThread::sleep(2);
+                        Render();
+                        SwitchActivePlayer();
+                        if(Logic->CanMove(GameDat)){
+                            QThread::msleep(300);
+                            GameInteligence *AI = new GameInteligence();
+                            GameDat = AI->SwitchInteligence(GameDat);
+                            QThread::msleep(300);
+                            SwitchActivePlayer();
+                            GameDat = Logic->ReCountScore(GameDat);
+                            clearConsole();
+                            Render();
+                            DissableButtonGrid();
+                        }else{
+                            WinMessage();
+                            break;
+                        }
+
+                    }
+                 }
+             }else{
+                 clearConsole();
+                 cout<<"Nemuzes hrat. Protihrac je na tahu..."<<endl;
+                 QThread::sleep(2);
+                 Render();
+                SwitchActivePlayer();
+                if(Logic->CanMove(GameDat)){
+                    GameDat = Logic->ReCountScore(GameDat);
+                    clearConsole();
+                    Render();
+                    DissableButtonGrid();
+                }else{
+                  WinMessage();
+                }
+             }
+             if(GameDat->Game.RemainingStones==0){
+                   WinMessage();
+             }
+         }else{
+             clearConsole();
+             cout<<"Tento tah nelze provedst..."<<endl;
+             QThread::sleep(2);
+             Render();
+         }
+     }
+    }else{
+        clearConsole();
+        cout<<"Tento tah nelze provedst..."<<endl;
+        QThread::sleep(2);
+        Render();
+    }
+   return 0;
+}
+
+/**
+ * @brief getIfromString Funkce ziskavajici souradnici I ze vstupniho retezce
+ * @param line Retezec pro zpracovani
+ * @return Souradnice I
+ */
+int getIfromString(QString line){
+    QChar ichar = line.at(4);
+    int i=ichar.toLatin1();
+    i=i-97;
+    return i;
+
+
+}
+
+/**
+ * @brief getIfromString Funkce ziskavajici souradnici J ze vstupniho retezce
+ * @param line Retezec pro zpracovani
+ * @return Souradnice J
+ */
+int getJfromString(QString line){
+    QString tmpString="   ";
+    tmpString.resize(3);
+    tmpString[0]=line.at(6);
+    if(line.length() > 7){
+    tmpString[1]=line.at(7);
+    }
+
+    int j=tmpString.toInt();
+    return j-1;
+}
+
+/**
+ * @brief game Funkce pro zpracovani prikazu ze hry a volani odpovidajicich funkci
+ * @return
+ */
 int game(){
     DissableButtonGrid();
     Init();
     Render();
+    while(true){
+        QTextStream s(stdin);
+        //std::string line;
 
+        QString Qline = s.readLine();
+        if(QString::compare(Qline,"quit",Qt::CaseInsensitive)==0){
+            break;
+        }else{
+            if(QString::compare(Qline,"undo",Qt::CaseInsensitive)==0){
+                Undo();
+            }else{
+                if(QString::compare(Qline,"redo",Qt::CaseInsensitive)==0){
+                    Redo();
+                }else{
+                    if(QString::compare(Qline,"save",Qt::CaseInsensitive)==0){
+                        Save();
+                    }else{
+                        if(Qline.startsWith("add ",Qt::CaseInsensitive)==true){
+
+                            Qline = Qline.toLower();
+                            int i= getIfromString(Qline);
+
+                            if((i<0)or(i>GameDat->Game.GridSize-1)){
+                                clearConsole();
+                                cout<<"Spatna hodnota I..."<<endl;
+                                QThread::sleep(2);
+                                Render();
+                            }
+                            int j = getJfromString(Qline);
+                            if((j<0)or(j>GameDat->Game.GridSize-1)){
+                                clearConsole();
+                                cout<<"Spatna hodnota J..."<<endl;
+                                QThread::sleep(2);
+                                Render();
+                            }
+                            if(Play(i,j)!=0){
+                                break;
+                            }
+                        }else{
+                            clearConsole();
+                            cout<<"Nespravny prikaz..."<<endl;
+                            QThread::sleep(2);
+                            Render();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    return 0;
 }
 
+/**
+ * @brief main funkce main
+ * @param argc  Pocet vstupnich argumentu
+ * @param argv  Vstupni argumenty
+ * @return
+ */
 int main(int argc, char *argv[])
 {
     if(!((argc>1) && (argc<4))){
